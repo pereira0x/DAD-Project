@@ -25,3 +25,10 @@ replay_pid*
 .pre-commit-config.yaml
 contract/pom.xml
 target/
+
+
+intel-pom.xml
+arm-pom.xml
+windows-intel-pom.xml
+
+/contract/*.xml
