@@ -14,6 +14,13 @@ public class DadkvsServer {
 								    
     /** Server host port. */
     private static int port;
+
+	public static void debug(String debugClass, String format, Object... args) {
+		// TODO -- add check to debug mode variable
+		System.out.printf("[%s] ", debugClass);
+		System.out.printf(format, args);
+		System.out.println();
+	}
     
     public static void main(String[] args) throws Exception {
 	final int kvsize = 1000;
