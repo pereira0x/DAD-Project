@@ -25,3 +25,7 @@ replay_pid*
 .pre-commit-config.yaml
 contract/pom.xml
 target/
+
+# .idea or .vscode
+.idea/
+.vscode/
