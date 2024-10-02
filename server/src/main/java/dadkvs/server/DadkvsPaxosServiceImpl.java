@@ -9,40 +9,52 @@ import io.grpc.stub.StreamObserver;
 
 public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosServiceImplBase {
 
+	DadkvsServerState server_state;
 
-    DadkvsServerState server_state;
-    
-    
-    public DadkvsPaxosServiceImpl(DadkvsServerState state) {
-	this.server_state = state;
-	
-    }
-    
+	public DadkvsPaxosServiceImpl(DadkvsServerState state) {
+		this.server_state = state;
 
-    @Override
-    public void phaseone(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
-		DadkvsServer.debug(this.getClass().getName(), "Receive phase one request with proposal number: " + request.getPhase1Timestamp()
-				+ " and sequence number: " + request.getPhase1Index());
-		int sequenceNumber = request.getPhase1Index();
-		int proposalNumber = request.getPhase1Timestamp();
-		// TODO --> properly implement checks for highest proposal number and value
-		DadkvsPaxos.PhaseOneReply reply = DadkvsPaxos.PhaseOneReply.newBuilder().setPhase1Accepted(true).build();
-		responseObserver.onNext(reply);
-		responseObserver.onCompleted();
-    }
+	}
 
-    @Override
-    public void phasetwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
-	// for debug purposes
-	System.out.println ("Receive phase two request: " + request);
+	@Override
+	public void phaseone(DadkvsPaxos.PhaseOneRequest request,
+			StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
+		DadkvsServer.debug(this.getClass().getName(),
+				"Receive phase one request with proposal number: " + request.getPhase1Timestamp());
+		int roundNumber = request.getRoundNumber();
+		if (roundNumber > this.server_state.getWr_timestamp()) {
+			// if the proposal number i'm getting is bigger than mine, I promise to accept
+			// it
+			DadkvsServer.debug(this.getClass().getName(), "Accepting proposal number: " + roundNumber);
+			this.server_state.setWr_timestamp(roundNumber);
+			DadkvsPaxos.PhaseOneReply reply = DadkvsPaxos.PhaseOneReply.newBuilder()
+					.setPhase1Accepted(true)
+					.setPhase1Value(this.server_state.getValue()).build();
+			responseObserver.onNext(reply);
+			responseObserver.onCompleted();
+		} else {
+			// the proposal number is smaller than mine; I promised to accept a bigger one,
+			// so I reject this one
+			DadkvsServer.debug(this.getClass().getName(), "Rejecting proposal number: " + roundNumber);
+			DadkvsPaxos.PhaseOneReply reply = DadkvsPaxos.PhaseOneReply.newBuilder().setPhase1Accepted(false).build();
+			responseObserver.onNext(reply);
+			responseObserver.onCompleted();
+		}
+	}
 
-    }
+	@Override
+	public void phasetwo(DadkvsPaxos.PhaseTwoRequest request,
+			StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
+		// for debug purposes
+		System.out.println("Receive phase two request: " + request);
 
-    @Override
-    public void learn(DadkvsPaxos.LearnRequest request, StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
-	// for debug purposes
-	System.out.println("Receive learn request: " + request);
+	}
 
-    }
+	@Override
+	public void learn(DadkvsPaxos.LearnRequest request, StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
+		// for debug purposes
+		System.out.println("Receive learn request: " + request);
+
+	}
 
 }

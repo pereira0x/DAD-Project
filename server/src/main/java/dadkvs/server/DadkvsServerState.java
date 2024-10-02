@@ -27,13 +27,19 @@ public class DadkvsServerState {
 	private int proposalNumberCounter = 0;
 	private int sequenceNumber = 0;
 	private Map<Integer, ProposerState> proposerStates = new ConcurrentHashMap<>();
-	private Map<Integer, AcceptorState> acceptorStates = new ConcurrentHashMap<>();
+	//private PromiseState promiseState;
 	// communication with other servers
 	private final ManagedChannel[] serverChannels;
 	private final DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] paxosStubs;
 	private String[] targets;
 	private String host;
 	private int n_servers;
+	private int n_acceptors;
+	private int n_proposers;
+	// paxos
+	private int rd_timestamp;
+	private int wr_timestamp;
+	private int value;
 
     public DadkvsServerState(int kv_size, int port, int myself) {
 		base_port = port;
@@ -47,6 +53,8 @@ public class DadkvsServerState {
 		main_loop_worker.start();
 		// communication with other servers
 		this.n_servers = 5;
+		this.n_acceptors = 3;
+		this.n_proposers = 3;
 		this.host = "localhost";
 		this.targets = new String[n_servers];
 		this.serverChannels = new ManagedChannel[n_servers];
@@ -57,6 +65,11 @@ public class DadkvsServerState {
 			serverChannels[i] = ManagedChannelBuilder.forTarget(targets[i]).usePlaintext().build();
 			paxosStubs[i] = DadkvsPaxosServiceGrpc.newStub(serverChannels[i]);
 		}
+		// paxos
+		this.wr_timestamp = 0;
+		this.rd_timestamp = 0;
+		this.value = 0;
+		//this.promiseState = new PromiseState(0, null, 0);
 		DadkvsServer.debug(this.getClass().getSimpleName(), "Am I the leader? " + i_am_leader);
     }
 
@@ -71,10 +84,12 @@ public class DadkvsServerState {
 			ProposerState proposerState = new ProposerState(proposalNumber, request);
 			proposerStates.put(sequenceNumber, proposerState);
 
-			// phase 1
-			boolean phaseOneResult = sendPrepareRequests(sequenceNumber, proposalNumber, proposerState);
+			// phase 1 // Send PREPARE TO ALL ACCEPTORS
+			boolean phaseOneResult = runPaxosPhase1(sequenceNumber, proposalNumber, proposerState);
 			if (!phaseOneResult) {
 				// TODO --> if phase one fails, what do we need to do?
+				
+				
 				DadkvsServer.debug(this.getClass().getSimpleName(), "Phase one failed for sequence number " + sequenceNumber);
 				return false;
 			}
@@ -91,52 +106,60 @@ public class DadkvsServerState {
 		return true;
 	}
 
-	private boolean sendPrepareRequests(int sequenceNumber, int proposalNumber, ProposerState proposerState) {
-		int answers = 0; // promises received
-		int totalAcceptors = 5;
-		int majority = totalAcceptors / 2 + 1;
+	private boolean runPaxosPhase1(int sequenceNumber, int proposalNumber, ProposerState proposerState) {
+		int majority = n_acceptors / 2 + 1;
+		int new_wrt_timestamp = -1;
+		int new_value = -1;
 		// constructs request
 		DadkvsPaxos.PhaseOneRequest phaseOneRequest = DadkvsPaxos.PhaseOneRequest.newBuilder()
-				.setPhase1Index(sequenceNumber)
 				.setPhase1Timestamp(proposalNumber)
 				.build();
 		ArrayList<DadkvsPaxos.PhaseOneReply> phaseOneReplies = new ArrayList<>();
-		GenericResponseCollector<DadkvsPaxos.PhaseOneReply> phaseOneCollector = new GenericResponseCollector<>(phaseOneReplies, n_servers);
-		for (DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub paxosStub : paxosStubs) {
+		GenericResponseCollector<DadkvsPaxos.PhaseOneReply> phaseOneCollector = new GenericResponseCollector<>(phaseOneReplies, n_acceptors);
+		// TODO: send to all acceptors - not just the first 3 servers
+		for (int i = 0; i < n_acceptors; i++) {
+			DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub paxosStub = paxosStubs[i];
 			DadkvsServer.debug(this.getClass().getSimpleName(), "Sending prepare request with sequence number " + sequenceNumber +
 					" and proposal number " + proposalNumber + " to " + paxosStub);
 			CollectorStreamObserver<DadkvsPaxos.PhaseOneReply> phaseOneObserver = new CollectorStreamObserver<>(phaseOneCollector);
 			paxosStub.phaseone(phaseOneRequest, phaseOneObserver);
 		}
+		
 		phaseOneCollector.waitForTarget(majority);
 		// checks if we got a majority of promises
 		int promises = 0;
 		for (DadkvsPaxos.PhaseOneReply phaseOneReply: phaseOneReplies) {
 			if (phaseOneReply.getPhase1Accepted()) {
 				promises++;
+
+				if (phaseOneReply.getPhase1Timestamp() > this.wr_timestamp) {
+					new_wrt_timestamp = phaseOneReply.getPhase1Timestamp();
+					new_value = phaseOneReply.getPhase1Value();
+				}
 			}
 		}
 		// for debug only
 		if (promises >= majority) {
 			DadkvsServer.debug(this.getClass().getSimpleName(), "Received majority of promises for sequence number " + sequenceNumber);
+		  	this.wr_timestamp = new_wrt_timestamp;
+			this.value = new_value;
 		} else {
 			DadkvsServer.debug(this.getClass().getSimpleName(), "Did not receive majority of promises for sequence number " + sequenceNumber);
 		}
 		return promises >= majority;
 	}
 
-	private int generateProposalNumber() {
+	private synchronized int generateProposalNumber() {
 		// need to generate unique proposal numbers
 		proposalNumberCounter++;
-		return proposalNumberCounter * 10 + my_id;
+		return proposalNumberCounter * n_proposers + my_id;
 	}
 
-	public AcceptorState getOrCreateAcceptorState(int sequenceNumber) {
-		AcceptorState acceptorState = acceptorStates.get(sequenceNumber);
-		if (acceptorState == null) {
-			acceptorState = new AcceptorState(0, null);
-			acceptorStates.put(sequenceNumber, acceptorState);
-		}
-		return acceptorState;
-	}
+	public int getWr_timestamp() { return wr_timestamp; }
+
+	public int getRd_timestamp() { return rd_timestamp; }
+
+	public int getValue() { return value; }
+
+	public void setWr_timestamp(int ts) { wr_timestamp = ts; }
 }

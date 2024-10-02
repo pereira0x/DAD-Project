@@ -5,17 +5,14 @@ syntax = "proto3";
 package dadkvs;
 
 message PhaseOneRequest { // prepare
-  int32 phase1config    = 1;
-  int32 phase1index     = 2;
-  int32 phase1timestamp = 3; // proposal number
+  int32 roundNumber = 1; // proposal PHASE1TIMESTAMP
 }
 
 message PhaseOneReply { // promise
-  int32 phase1config    = 1;
-  int32 phase1index     = 2;
-  bool  phase1accepted  = 3;
+  int32 phase1timestamp = 1; // promise PHASE1TIMESTAMP
+  bool  phase1accepted  = 2; // promise PHASE1TIMESTAMP accepted PHASE1ACCEPTED, (KEY, VALUE)
+  int32 phase1key       = 3; 
   int32 phase1value     = 4;
-  int32 phase1timestamp = 5;
 }
 
 message PhaseTwoRequest { // accept! (propose)
