@@ -51,6 +51,8 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 		ctx.run(() -> {
 			int reqid = request.getReqid();
 			int key = request.getKey();
+
+
 			VersionedValue vv = this.server_state.store.read(key);
 
 			DadkvsMain.ReadReply response = DadkvsMain.ReadReply.newBuilder()
