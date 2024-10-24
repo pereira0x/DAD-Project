@@ -89,7 +89,23 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
                 // we set the write_ts to the roundNumber
                 this.server_state.setWriteTs(proposedRoundNumber);
                 //this.server_state.setLatestAcceptedRoundNumber(proposedRoundNumber);
-                this.server_state.learn(request.getPhase2RoundNumber(), request.getPhase2Reqid());
+
+				// reconfiguration
+				if (this.server_state.getPendingCommits().get(request.getPhase2Reqid()).getWritekey() == 0) {
+
+					DadkvsServer.debug(this.getClass().getSimpleName(), "Reconfiguring the server");
+					
+				    this.server_state.jointConsensusOn();
+					DadkvsServer.debug(this.getClass().getSimpleName(), "Joint Consensus On");
+					/* int newConfig = this.server_state.getPendingCommits().get(request.getPhase2Reqid()).getKey1();
+					this.server_state.setNextConfig(); */
+				}
+
+				// Normal Transaction - Non reconfiguration
+				else {
+					this.server_state.learn(request.getPhase2RoundNumber(), request.getPhase2Reqid());
+				}
+                
 
                 DadkvsPaxos.PhaseTwoReply reply = DadkvsPaxos.PhaseTwoReply.newBuilder().setPhase2Accepted(true).setPhase2Config(this.server_state.getConfig()).build();
                 responseObserver.onNext(reply);
@@ -120,7 +136,7 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
         ctx.run(() -> {
             DadkvsServer.debug(this.getClass().getSimpleName(), "Accepting value of reqId %d, will send LEARN-ACCEPTED.",
                     request.getLearnreqid());
-					
+			
             // Checks if we have a majority to commit the request
             int majority = this.server_state.getNumberOfAcceptors() / 2 + 1;
             int learnCounter = this.server_state.getLearnCounter(request.getLearnreqid(), request.getLearnroundnumber());
@@ -134,6 +150,7 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
                 DadkvsServer.debug(this.getClass().getSimpleName(), "Committing request with reqId %d.", request.getLearnreqid());
                 this.server_state.commitRequest(request.getLearnreqid());
             }
+
 
             DadkvsPaxos.LearnReply reply = DadkvsPaxos.LearnReply.newBuilder().setLearnaccepted(true).setLearnconfig(this.server_state.getConfig()).build();
             DadkvsServer.debug(this.getClass().getSimpleName(), "Sending LEARN-REPLY with round number %d and reqid %d\n",

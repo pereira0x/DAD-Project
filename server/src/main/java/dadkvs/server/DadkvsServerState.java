@@ -231,6 +231,7 @@ public class DadkvsServerState {
             // wait for ALL previous proposers to reply
             phaseOneCollector.waitForTarget(3);
 
+
             int promisesCounter = 0;
             int new_reqId = reqId; // let's check if there is a greater one
             int maxReadTs = -1;
@@ -254,7 +255,6 @@ public class DadkvsServerState {
                 } else {
                     // TODO: RETRY AGAIN WITH NEW ROUND NUMBER -> IF NOT ACCEPTED, DO WE RETRY, OR ONLY IF WE DON'T GET A MAJORITY?
                 }
-
             }
 
             previousProposersMajority = promisesCounter >= majority;
@@ -272,7 +272,7 @@ public class DadkvsServerState {
             if (configUpdated) {
                 // if the config was updated we must end the joint consensus
                 DadkvsServer.debug(this.getClass().getSimpleName(), "Config was updated, ending joint consensus");
-                jointConsensus = false;
+                jointConsensusOff();
             }
 
         }
@@ -389,7 +389,7 @@ public class DadkvsServerState {
             if (configUpdated) {
                 // if the config was updated we must end the joint consensus
                 DadkvsServer.debug(this.getClass().getSimpleName(), "Config was updated, ending joint consensus");
-                jointConsensus = false;
+                jointConsensusOff();
             }
 
         }
@@ -550,15 +550,21 @@ public class DadkvsServerState {
 	}
 
 
-	public void JointConsensusOn() {
+	public void jointConsensusOn() {
 		this.jointConsensus = true;
 	}
 
-	public void JointConsensusOff() {
+	public void jointConsensusOff() {
 		this.jointConsensus = false;
 	}
 
+	public Map<Integer, DadkvsMain.CommitRequest> getPendingCommits() {
+		return pendingCommits;
+	}
 
+	public void setConfig(int config) {
+		this.config = config;
+	}
 
     public ManagedChannel[] getServerChannels() {
         return serverChannels;
